@@ -31,12 +31,13 @@ func main() {
 	}
 
 	// 初始化处理器
+	authHandler := handler.NewAuthHandler(db, cfg.WeChat.AppID, cfg.WeChat.AppSecret)
 	roomHandler := handler.NewRoomHandler(db)
 	memberHandler := handler.NewMemberHandler(db)
 	scoreHandler := handler.NewScoreHandler(db)
 
 	// 设置路由
-	r := router.SetupRouter(roomHandler, memberHandler, scoreHandler)
+	r := router.SetupRouter(authHandler, roomHandler, memberHandler, scoreHandler)
 
 	// 启动服务器
 	addr := ":" + cfg.Server.Port

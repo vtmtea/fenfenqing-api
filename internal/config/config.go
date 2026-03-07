@@ -1,6 +1,9 @@
 package config
 
 import (
+	"log"
+
+	"github.com/joho/godotenv"
 	"os"
 )
 
@@ -8,6 +11,7 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
+	WeChat   WeChatConfig
 }
 
 // ServerConfig 服务器配置
@@ -25,8 +29,19 @@ type DatabaseConfig struct {
 	DBName   string
 }
 
+// WeChatConfig 微信配置
+type WeChatConfig struct {
+	AppID     string
+	AppSecret string
+}
+
 // Load 加载配置
 func Load() *Config {
+	// 加载 .env 文件
+	if err := godotenv.Load(); err != nil {
+		log.Println("Warning: .env file not found, using environment variables")
+	}
+
 	config := &Config{
 		Server: ServerConfig{
 			Port: getEnv("SERVER_PORT", "8080"),
@@ -38,6 +53,10 @@ func Load() *Config {
 			User:     getEnv("DB_USER", "root"),
 			Password: getEnv("DB_PASSWORD", ""),
 			DBName:   getEnv("DB_NAME", "fenfenqing"),
+		},
+		WeChat: WeChatConfig{
+			AppID:     getEnv("WECHAT_APPID", ""),
+			AppSecret: getEnv("WECHAT_APP_SECRET", ""),
 		},
 	}
 	return config

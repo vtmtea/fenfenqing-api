@@ -6,15 +6,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/vtmtea/fenfenqing-api/internal/model"
 	"github.com/vtmtea/fenfenqing-api/pkg/response"
+	"gorm.io/gorm"
 )
 
 // RoomHandler 房间处理器
 type RoomHandler struct {
-	db *model.DB
+	db *gorm.DB
 }
 
 // NewRoomHandler 创建房间处理器
-func NewRoomHandler(db *model.DB) *RoomHandler {
+func NewRoomHandler(db *gorm.DB) *RoomHandler {
 	return &RoomHandler{db: db}
 }
 

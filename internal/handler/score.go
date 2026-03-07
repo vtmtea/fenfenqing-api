@@ -6,15 +6,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/vtmtea/fenfenqing-api/internal/model"
 	"github.com/vtmtea/fenfenqing-api/pkg/response"
+	"gorm.io/gorm"
 )
 
 // ScoreHandler 分数处理器
 type ScoreHandler struct {
-	db *model.DB
+	db *gorm.DB
 }
 
 // NewScoreHandler 创建分数处理器
-func NewScoreHandler(db *model.DB) *ScoreHandler {
+func NewScoreHandler(db *gorm.DB) *ScoreHandler {
 	return &ScoreHandler{db: db}
 }
 

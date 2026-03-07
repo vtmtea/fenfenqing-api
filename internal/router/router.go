@@ -3,10 +3,12 @@ package router
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/vtmtea/fenfenqing-api/internal/handler"
+	"github.com/vtmtea/fenfenqing-api/internal/middleware"
 )
 
 // SetupRouter 设置路由
 func SetupRouter(
+	authHandler *handler.AuthHandler,
 	roomHandler *handler.RoomHandler,
 	memberHandler *handler.MemberHandler,
 	scoreHandler *handler.ScoreHandler,
@@ -21,25 +23,40 @@ func SetupRouter(
 	// API 路由组
 	api := r.Group("/api")
 	{
-		// 房间相关
-		rooms := api.Group("/rooms")
+		// 认证相关（无需登录）
+		api.POST("/auth/login", authHandler.Login)           // 微信登录
+		api.GET("/auth/wechat", authHandler.Login)           // 兼容小程序码扫码
+
+		// 需要认证的路由
+		protected := api.Group("")
+		protected.Use(middleware.JWTAuth())
 		{
-			rooms.GET("", roomHandler.GetRoomList)          // 获取房间列表
-			rooms.POST("", roomHandler.CreateRoom)          // 创建房间
-			rooms.GET("/:id", roomHandler.GetRoomByID)      // 根据 ID 获取房间
-			rooms.GET("/roomId/:roomID", roomHandler.GetRoomByRoomID) // 根据房间号获取房间
-			rooms.DELETE("/:id", roomHandler.DeleteRoom)    // 删除房间
+			// 用户相关
+			protected.GET("/user/info", authHandler.GetUserInfo)     // 获取用户信息
+			protected.PUT("/user", authHandler.UpdateUserInfo)       // 更新用户信息
+
+			// 房间相关
+			rooms := protected.Group("/rooms")
+			{
+				rooms.GET("", roomHandler.GetRoomList)                    // 获取房间列表
+				rooms.POST("", roomHandler.CreateRoom)                    // 创建房间
+				rooms.GET("/:id", roomHandler.GetRoomByID)                // 根据 ID 获取房间
+				rooms.DELETE("/:id", roomHandler.DeleteRoom)              // 删除房间
+
+				// 成员相关
+				rooms.GET("/:id/members", memberHandler.GetMemberList)    // 获取成员列表
+				rooms.POST("/:id/members", memberHandler.AddMember)       // 添加成员
+				rooms.DELETE("/:id/members/:memberID", memberHandler.DeleteMember) // 删除成员
+
+				// 分数相关
+				rooms.GET("/:id/scores", scoreHandler.GetScoreList)       // 获取分数记录
+				rooms.POST("/:id/scores", scoreHandler.AddScore)          // 添加分数记录
+				rooms.DELETE("/:id/scores/:scoreID", scoreHandler.DeleteScore) // 删除分数记录
+			}
+
+			// 根据房间号获取房间（无需认证，用于加入房间）
+			api.GET("/rooms/roomId/:roomID", roomHandler.GetRoomByRoomID)
 		}
-
-		// 成员相关
-		rooms.GET("/:roomID/members", memberHandler.GetMemberList) // 获取成员列表
-		rooms.POST("/:roomID/members", memberHandler.AddMember)    // 添加成员
-		rooms.DELETE("/:roomID/members/:memberID", memberHandler.DeleteMember) // 删除成员
-
-		// 分数相关
-		rooms.GET("/:roomID/scores", scoreHandler.GetScoreList) // 获取分数记录
-		rooms.POST("/:roomID/scores", scoreHandler.AddScore)    // 添加分数记录
-		rooms.DELETE("/:roomID/scores/:scoreID", scoreHandler.DeleteScore) // 删除分数记录
 	}
 
 	// 404 处理

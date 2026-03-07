@@ -6,28 +6,29 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/vtmtea/fenfenqing-api/internal/model"
 	"github.com/vtmtea/fenfenqing-api/pkg/response"
+	"gorm.io/gorm"
 )
 
 // MemberHandler 成员处理器
 type MemberHandler struct {
-	db *model.DB
+	db *gorm.DB
 }
 
 // NewMemberHandler 创建成员处理器
-func NewMemberHandler(db *model.DB) *MemberHandler {
+func NewMemberHandler(db *gorm.DB) *MemberHandler {
 	return &MemberHandler{db: db}
 }
 
 // GetMemberList 获取成员列表
 func (h *MemberHandler) GetMemberList(c *gin.Context) {
-	roomIDStr := c.Param("roomID")
+	roomIDStr := c.Param("id")
 	roomID, err := strconv.ParseUint(roomIDStr, 10, 32)
 	if err != nil {
 		response.BadRequest(c, "无效的房间 ID")
 		return
 	}
 
-	var members []model.Member
+	var members []model.RoomMember
 	if err := h.db.Where("room_id = ?", roomID).Find(&members).Error; err != nil {
 		response.InternalError(c, "获取成员列表失败")
 		return
@@ -38,7 +39,13 @@ func (h *MemberHandler) GetMemberList(c *gin.Context) {
 
 // AddMember 添加成员
 func (h *MemberHandler) AddMember(c *gin.Context) {
-	roomIDStr := c.Param("roomID")
+	userID, exists := c.Get("userID")
+	if !exists {
+		response.Unauthorized(c)
+		return
+	}
+
+	roomIDStr := c.Param("id")
 	roomID, err := strconv.ParseUint(roomIDStr, 10, 32)
 	if err != nil {
 		response.BadRequest(c, "无效的房间 ID")
@@ -61,8 +68,18 @@ func (h *MemberHandler) AddMember(c *gin.Context) {
 		return
 	}
 
-	member := &model.Member{
+	// 检查是否已是成员
+	var existing model.RoomMember
+	if err := h.db.Where("room_id = ? AND user_id = ?", roomID, userID).First(&existing).Error; err == nil {
+		// 已是成员，更新名称
+		h.db.Model(&existing).Update("name", req.Name)
+		response.Success(c, existing)
+		return
+	}
+
+	member := &model.RoomMember{
 		RoomID: uint(roomID),
+		UserID: userID.(uint),
 		Name:   req.Name,
 	}
 
@@ -79,7 +96,7 @@ func (h *MemberHandler) AddMember(c *gin.Context) {
 
 // DeleteMember 删除成员
 func (h *MemberHandler) DeleteMember(c *gin.Context) {
-	roomIDStr := c.Param("roomID")
+	roomIDStr := c.Param("id")
 	memberIDStr := c.Param("memberID")
 
 	roomID, err := strconv.ParseUint(roomIDStr, 10, 32)
@@ -102,7 +119,7 @@ func (h *MemberHandler) DeleteMember(c *gin.Context) {
 	}
 
 	// 删除成员
-	var member model.Member
+	var member model.RoomMember
 	if err := h.db.Where("id = ? AND room_id = ?", memberID, roomID).First(&member).Error; err != nil {
 		response.NotFound(c)
 		return
