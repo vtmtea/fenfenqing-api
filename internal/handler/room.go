@@ -2,6 +2,7 @@ package handler
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/vtmtea/fenfenqing-api/internal/model"
@@ -92,13 +93,115 @@ func (h *RoomHandler) GetRoomList(c *gin.Context) {
 		return
 	}
 
+	statusStr := c.DefaultQuery("status", "")
+
+	query := h.db.Where("user_id = ?", userID)
+
+	// 按状态筛选
+	if statusStr == "closed" {
+		query = query.Where("status = ?", 1) // 已关闭
+	} else if statusStr == "active" {
+		query = query.Where("status = ?", 0) // 进行中
+	}
+
 	var rooms []model.Room
-	if err := h.db.Where("user_id = ?", userID).Order("update_time DESC").Find(&rooms).Error; err != nil {
+	if err := query.Order("update_time DESC").Find(&rooms).Error; err != nil {
 		response.InternalError(c, "获取房间列表失败")
 		return
 	}
 
 	response.Success(c, rooms)
+}
+
+// CloseRoom 关闭房间
+func (h *RoomHandler) CloseRoom(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		response.Unauthorized(c)
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的房间 ID")
+		return
+	}
+
+	var room model.Room
+	if err := h.db.First(&room, id).Error; err != nil {
+		response.NotFound(c)
+		return
+	}
+
+	// 只有房间创建者可以关闭房间
+	if room.UserID != userID.(uint) {
+		response.Forbidden(c)
+		return
+	}
+
+	// 检查房间是否已关闭
+	if room.Status == 1 {
+		response.BadRequest(c, "房间已关闭")
+		return
+	}
+
+	now := time.Now()
+	if err := h.db.Model(&room).Updates(map[string]interface{}{
+		"status":    1,
+		"closed_at": now,
+		"closed_by": userID,
+	}).Error; err != nil {
+		response.InternalError(c, "关闭房间失败")
+		return
+	}
+
+	response.Success(c, nil)
+}
+
+// ReopenRoom 重新打开房间
+func (h *RoomHandler) ReopenRoom(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		response.Unauthorized(c)
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的房间 ID")
+		return
+	}
+
+	var room model.Room
+	if err := h.db.First(&room, id).Error; err != nil {
+		response.NotFound(c)
+		return
+	}
+
+	// 只有房间创建者可以重新打开房间
+	if room.UserID != userID.(uint) {
+		response.Forbidden(c)
+		return
+	}
+
+	// 检查房间是否未关闭
+	if room.Status == 0 {
+		response.BadRequest(c, "房间正在进行中")
+		return
+	}
+
+	if err := h.db.Model(&room).Updates(map[string]interface{}{
+		"status":    0,
+		"closed_at": (*time.Time)(nil),
+		"closed_by": 0,
+	}).Error; err != nil {
+		response.InternalError(c, "重新打开房间失败")
+		return
+	}
+
+	response.Success(c, nil)
 }
 
 // GetRoomByID 根据 ID 获取房间
@@ -119,13 +222,19 @@ func (h *RoomHandler) GetRoomByID(c *gin.Context) {
 	response.Success(c, room)
 }
 
-// GetRoomByRoomID 根据房间号获取房间
+// GetRoomByRoomID 根据房间号获取房间（用于加入房间）
 func (h *RoomHandler) GetRoomByRoomID(c *gin.Context) {
 	roomID := c.Param("roomID")
 
 	var room model.Room
 	if err := h.db.Where("room_id = ?", roomID).First(&room).Error; err != nil {
 		response.NotFound(c)
+		return
+	}
+
+	// 检查房间是否已关闭
+	if room.Status == 1 {
+		response.BadRequest(c, "房间已关闭，无法加入")
 		return
 	}
 

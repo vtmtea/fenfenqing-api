@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -241,4 +242,115 @@ func (h *AuthHandler) code2Session(code string) (string, string, error) {
 	}
 
 	return result.OpenID, result.SessionKey, nil
+}
+
+// GenerateQRCodeRequest 生成二维码请求
+type GenerateQRCodeRequest struct {
+	RoomID string `json:"roomId" binding:"required"`
+}
+
+// GenerateQRCode 生成小程序码
+func (h *AuthHandler) GenerateQRCode(c *gin.Context) {
+	var req GenerateQRCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "请求参数错误")
+		return
+	}
+
+	// 检查微信配置
+	if h.wechat.AppID == "" || h.wechat.AppSecret == "" {
+		response.InternalError(c, "服务器配置错误")
+		return
+	}
+
+	// 获取 access token
+	accessToken, err := h.getAccessToken()
+	if err != nil {
+		response.InternalError(c, "获取 access token 失败")
+		return
+	}
+
+	// 调用微信接口生成小程序码
+	qrCodeURL := fmt.Sprintf(
+		"https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=%s",
+		accessToken,
+	)
+
+	// 请求体
+	reqBody := map[string]interface{}{
+		"scene":       req.RoomID, // 场景值为房间号（最长 32 字符）
+		"page":        "pages/join/join",
+		"width":       430,
+		"auto_color":  false,
+		"is_hyaline":  false,
+		"env_version": "trial", // release:正式版，trial:体验版，develop:开发版
+	}
+
+	reqBodyJSON, err := json.Marshal(reqBody)
+	if err != nil {
+		response.InternalError(c, "参数序列化失败")
+		return
+	}
+
+	resp, err := http.Post(qrCodeURL, "application/json", bytes.NewBuffer(reqBodyJSON))
+	if err != nil {
+		response.InternalError(c, "生成二维码失败")
+		return
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		response.InternalError(c, "读取响应失败")
+		return
+	}
+
+	// 检查是否返回错误（微信返回 JSON 表示错误）
+	var errResp map[string]interface{}
+	if err := json.Unmarshal(body, &errResp); err == nil {
+		if errMsg, ok := errResp["errmsg"]; ok {
+			response.InternalError(c, fmt.Sprintf("微信接口错误：%v", errMsg))
+			return
+		}
+	}
+
+	// 返回二维码图片的 base64
+	c.Header("Content-Type", "image/png")
+	c.Data(200, "image/png", body)
+}
+
+// getAccessToken 获取小程序全局 access token
+func (h *AuthHandler) getAccessToken() (string, error) {
+	url := fmt.Sprintf(
+		"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s",
+		h.wechat.AppID,
+		h.wechat.AppSecret,
+	)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", err
+	}
+
+	if accessToken, ok := result["access_token"].(string); ok {
+		return accessToken, nil
+	}
+
+	if errMsg, ok := result["errmsg"].(string); ok {
+		return "", fmt.Errorf("获取 access token 失败：%s", errMsg)
+	}
+
+	return "", fmt.Errorf("获取 access token 失败")
 }

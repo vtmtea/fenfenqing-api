@@ -34,7 +34,28 @@ func (h *MemberHandler) GetMemberList(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, members)
+	// 关联查询用户信息，获取头像
+	type MemberWithAvatar struct {
+		model.RoomMember
+		AvatarURL string `json:"avatarUrl"`
+	}
+	result := make([]MemberWithAvatar, 0, len(members))
+	for _, member := range members {
+		var user model.User
+		if err := h.db.First(&user, member.UserID).Error; err == nil {
+			result = append(result, MemberWithAvatar{
+				RoomMember: member,
+				AvatarURL:  user.AvatarURL,
+			})
+		} else {
+			result = append(result, MemberWithAvatar{
+				RoomMember: member,
+				AvatarURL:  "",
+			})
+		}
+	}
+
+	response.Success(c, result)
 }
 
 // AddMember 添加成员

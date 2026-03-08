@@ -26,6 +26,7 @@ func SetupRouter(
 		// 认证相关（无需登录）
 		api.POST("/auth/login", authHandler.Login)           // 微信登录
 		api.GET("/auth/wechat", authHandler.Login)           // 兼容小程序码扫码
+		api.POST("/auth/qrcode", authHandler.GenerateQRCode) // 生成小程序码
 
 		// 需要认证的路由
 		protected := api.Group("")
@@ -42,6 +43,8 @@ func SetupRouter(
 				rooms.POST("", roomHandler.CreateRoom)                    // 创建房间
 				rooms.GET("/:id", roomHandler.GetRoomByID)                // 根据 ID 获取房间
 				rooms.DELETE("/:id", roomHandler.DeleteRoom)              // 删除房间
+				rooms.POST("/:id/close", roomHandler.CloseRoom)           // 关闭房间
+				rooms.POST("/:id/reopen", roomHandler.ReopenRoom)         // 重新打开房间
 
 				// 成员相关
 				rooms.GET("/:id/members", memberHandler.GetMemberList)    // 获取成员列表

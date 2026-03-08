@@ -26,6 +26,9 @@ type Room struct {
 	Name        string    `gorm:"size:100;not null" json:"name"`
 	RoomID      string    `gorm:"size:10;uniqueIndex;not null" json:"roomId"`
 	MemberCount int       `gorm:"default:0" json:"memberCount"`
+	Status      int       `gorm:"default:0;comment:0-进行中，1-已关闭" json:"status"`
+	ClosedAt    *time.Time `gorm:"index" json:"closedAt,omitempty"`
+	ClosedBy    uint      `gorm:"default:0" json:"closedBy"` // 关闭者 ID
 	CreateTime  time.Time `gorm:"autoCreateTime" json:"createTime"`
 	UpdateTime  time.Time `gorm:"autoUpdateTime" json:"updateTime"`
 }

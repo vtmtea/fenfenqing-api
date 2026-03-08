@@ -47,3 +47,8 @@ func InternalError(c *gin.Context, message string) {
 func Unauthorized(c *gin.Context) {
 	Error(c, 401, "unauthorized")
 }
+
+// Forbidden 禁止访问
+func Forbidden(c *gin.Context) {
+	Error(c, 403, "forbidden")
+}
