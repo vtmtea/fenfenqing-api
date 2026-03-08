@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -63,6 +62,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// 检查微信配置
+	if h.wechat.AppID == "" || h.wechat.AppSecret == "" {
+		response.InternalError(c, "服务器配置错误")
+		return
+	}
+
 	// 调用微信接口获取 openid
 	openID, sessionKey, err := h.code2Session(req.Code)
 	if err != nil {
@@ -77,7 +82,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// 查找或创建用户
 	var user model.User
-	result := h.db.Where("openid = ?", openID).First(&user)
+	result := h.db.Where("open_id = ?", openID).First(&user)
 
 	now := time.Now()
 	if result.Error == gorm.ErrRecordNotFound {
@@ -236,139 +241,4 @@ func (h *AuthHandler) code2Session(code string) (string, string, error) {
 	}
 
 	return result.OpenID, result.SessionKey, nil
-}
-
-// RoomHandler 房间处理器
-type RoomHandler struct {
-	db *gorm.DB
-}
-
-// NewRoomHandler 创建房间处理器
-func NewRoomHandler(db *gorm.DB) *RoomHandler {
-	return &RoomHandler{db: db}
-}
-
-// CreateRoom 创建房间
-func (h *RoomHandler) CreateRoom(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		response.Unauthorized(c)
-		return
-	}
-
-	var req struct {
-		Name string `json:"name" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "房间名称不能为空")
-		return
-	}
-
-	// 生成唯一房间号
-	roomID := model.GenerateRoomID()
-	for h.db.Where("room_id = ?", roomID).First(&model.Room{}).Error == nil {
-		roomID = model.GenerateRoomID()
-	}
-
-	room := &model.Room{
-		UserID: userID.(uint),
-		Name:   req.Name,
-		RoomID: roomID,
-	}
-
-	if err := h.db.Create(room).Error; err != nil {
-		response.InternalError(c, "创建房间失败")
-		return
-	}
-
-	response.Success(c, room)
-}
-
-// GetRoomList 获取房间列表（用户创建的房间）
-func (h *RoomHandler) GetRoomList(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		response.Unauthorized(c)
-		return
-	}
-
-	var rooms []model.Room
-	if err := h.db.Where("user_id = ?", userID).Order("update_time DESC").Find(&rooms).Error; err != nil {
-		response.InternalError(c, "获取房间列表失败")
-		return
-	}
-
-	response.Success(c, rooms)
-}
-
-// GetRoomByID 根据 ID 获取房间
-func (h *RoomHandler) GetRoomByID(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		response.BadRequest(c, "无效的房间 ID")
-		return
-	}
-
-	var room model.Room
-	if err := h.db.First(&room, id).Error; err != nil {
-		response.NotFound(c)
-		return
-	}
-
-	response.Success(c, room)
-}
-
-// GetRoomByRoomID 根据房间号获取房间
-func (h *RoomHandler) GetRoomByRoomID(c *gin.Context) {
-	roomID := c.Param("roomID")
-
-	var room model.Room
-	if err := h.db.Where("room_id = ?", roomID).First(&room).Error; err != nil {
-		response.NotFound(c)
-		return
-	}
-
-	response.Success(c, room)
-}
-
-// DeleteRoom 删除房间
-func (h *RoomHandler) DeleteRoom(c *gin.Context) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		response.Unauthorized(c)
-		return
-	}
-
-	idStr := c.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		response.BadRequest(c, "无效的房间 ID")
-		return
-	}
-
-	// 验证房间所有权
-	var room model.Room
-	if err := h.db.Where("id = ? AND user_id = ?", id, userID).First(&room).Error; err != nil {
-		response.NotFound(c)
-		return
-	}
-
-	// 使用事务删除房间及相关数据
-	tx := h.db.Begin()
-	if err := tx.Delete(&room).Error; err != nil {
-		tx.Rollback()
-		response.InternalError(c, "删除房间失败")
-		return
-	}
-
-	// 删除成员
-	tx.Where("room_id = ?", id).Delete(&model.RoomMember{})
-	// 删除分数记录
-	tx.Where("room_id = ?", id).Delete(&model.Score{})
-
-	tx.Commit()
-
-	response.Success(c, nil)
 }

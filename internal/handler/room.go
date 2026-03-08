@@ -21,6 +21,12 @@ func NewRoomHandler(db *gorm.DB) *RoomHandler {
 
 // CreateRoom 创建房间
 func (h *RoomHandler) CreateRoom(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		response.Unauthorized(c)
+		return
+	}
+
 	var req struct {
 		Name string `json:"name" binding:"required"`
 	}
@@ -36,24 +42,58 @@ func (h *RoomHandler) CreateRoom(c *gin.Context) {
 		roomID = model.GenerateRoomID()
 	}
 
+	// 使用事务创建房间和成员
+	tx := h.db.Begin()
+
 	room := &model.Room{
-		Name:   req.Name,
-		RoomID: roomID,
+		UserID:      userID.(uint),
+		Name:        req.Name,
+		RoomID:      roomID,
+		MemberCount: 1, // 创建者自动成为成员
 	}
 
-	if err := h.db.Create(room).Error; err != nil {
+	if err := tx.Create(room).Error; err != nil {
+		tx.Rollback()
 		response.InternalError(c, "创建房间失败")
 		return
 	}
 
+	// 获取用户信息
+	var user model.User
+	if err := tx.First(&user, userID).Error; err != nil {
+		tx.Rollback()
+		response.InternalError(c, "获取用户信息失败")
+		return
+	}
+
+	// 创建者自动成为房间成员
+	member := &model.RoomMember{
+		RoomID: room.ID,
+		UserID: userID.(uint),
+		Name:   user.Nickname,
+	}
+
+	if err := tx.Create(member).Error; err != nil {
+		tx.Rollback()
+		response.InternalError(c, "添加成员失败")
+		return
+	}
+
+	tx.Commit()
+
 	response.Success(c, room)
 }
 
-// GetRoomList 获取房间列表
+// GetRoomList 获取房间列表（用户创建的房间）
 func (h *RoomHandler) GetRoomList(c *gin.Context) {
-	var rooms []model.Room
+	userID, exists := c.Get("userID")
+	if !exists {
+		response.Unauthorized(c)
+		return
+	}
 
-	if err := h.db.Order("update_time DESC").Find(&rooms).Error; err != nil {
+	var rooms []model.Room
+	if err := h.db.Where("user_id = ?", userID).Order("update_time DESC").Find(&rooms).Error; err != nil {
 		response.InternalError(c, "获取房间列表失败")
 		return
 	}
@@ -110,7 +150,7 @@ func (h *RoomHandler) DeleteRoom(c *gin.Context) {
 	}
 
 	// 删除成员
-	tx.Where("room_id = ?", id).Delete(&model.Member{})
+	tx.Where("room_id = ?", id).Delete(&model.RoomMember{})
 	// 删除分数记录
 	tx.Where("room_id = ?", id).Delete(&model.Score{})
 
