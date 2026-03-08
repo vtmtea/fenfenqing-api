@@ -1,13 +1,23 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/vtmtea/fenfenqing-api/internal/model"
+	"github.com/vtmtea/fenfenqing-api/internal/websocket"
 	"github.com/vtmtea/fenfenqing-api/pkg/response"
 	"gorm.io/gorm"
 )
+
+// 全局 Hub 引用（由 main.go 初始化时设置）
+var Hub *websocket.Hub
+
+// SetHub 设置全局 Hub
+func SetHub(hub *websocket.Hub) {
+	Hub = hub
+}
 
 // MemberHandler 成员处理器
 type MemberHandler struct {
@@ -66,6 +76,10 @@ func (h *MemberHandler) AddMember(c *gin.Context) {
 		return
 	}
 
+	openID := c.GetString("openid")
+	fmt.Printf("=== AddMember 调试信息 ===\n")
+	fmt.Printf("userID: %d, openID: %s\n", userID, openID)
+
 	roomIDStr := c.Param("id")
 	roomID, err := strconv.ParseUint(roomIDStr, 10, 32)
 	if err != nil {
@@ -93,6 +107,7 @@ func (h *MemberHandler) AddMember(c *gin.Context) {
 	var existing model.RoomMember
 	if err := h.db.Where("room_id = ? AND user_id = ?", roomID, userID).First(&existing).Error; err == nil {
 		// 已是成员，更新名称
+		fmt.Printf("成员已存在，更新名称\n")
 		h.db.Model(&existing).Update("name", req.Name)
 		response.Success(c, existing)
 		return
@@ -104,6 +119,7 @@ func (h *MemberHandler) AddMember(c *gin.Context) {
 		Name:   req.Name,
 	}
 
+	fmt.Printf("创建新成员：%+v\n", member)
 	if err := h.db.Create(member).Error; err != nil {
 		response.InternalError(c, "添加成员失败")
 		return
@@ -111,6 +127,26 @@ func (h *MemberHandler) AddMember(c *gin.Context) {
 
 	// 更新房间成员数量
 	h.db.Model(&room).Update("member_count", room.MemberCount+1)
+
+	// 查询用户信息获取头像
+	var user model.User
+	avatarURL := ""
+	if err := h.db.First(&user, userID).Error; err == nil {
+		avatarURL = user.AvatarURL
+	}
+
+	// 广播新成员加入消息
+	if Hub != nil {
+		Hub.BroadcastToRoom(uint(roomID), &websocket.Message{
+			Type: "member_join",
+			Data: gin.H{
+				"_id":       member.ID,
+				"userId":    member.UserID,
+				"name":      member.Name,
+				"avatarUrl": avatarURL,
+			},
+		})
+	}
 
 	response.Success(c, member)
 }

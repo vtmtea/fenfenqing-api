@@ -7,6 +7,7 @@ import (
 	"github.com/vtmtea/fenfenqing-api/internal/handler"
 	"github.com/vtmtea/fenfenqing-api/internal/model"
 	"github.com/vtmtea/fenfenqing-api/internal/router"
+	"github.com/vtmtea/fenfenqing-api/internal/websocket"
 )
 
 func main() {
@@ -30,14 +31,22 @@ func main() {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
+	// 创建 WebSocket Hub
+	hub := websocket.NewHub()
+	go hub.Run()
+
+	// 设置全局 Hub 引用
+	handler.SetHub(hub)
+
 	// 初始化处理器
 	authHandler := handler.NewAuthHandler(db, cfg.WeChat.AppID, cfg.WeChat.AppSecret)
 	roomHandler := handler.NewRoomHandler(db)
 	memberHandler := handler.NewMemberHandler(db)
 	scoreHandler := handler.NewScoreHandler(db)
+	wsHandler := handler.NewWSHandler(hub)
 
 	// 设置路由
-	r := router.SetupRouter(authHandler, roomHandler, memberHandler, scoreHandler)
+	r := router.SetupRouter(authHandler, roomHandler, memberHandler, scoreHandler, wsHandler)
 
 	// 启动服务器
 	addr := ":" + cfg.Server.Port

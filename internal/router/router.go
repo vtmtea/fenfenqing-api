@@ -12,6 +12,7 @@ func SetupRouter(
 	roomHandler *handler.RoomHandler,
 	memberHandler *handler.MemberHandler,
 	scoreHandler *handler.ScoreHandler,
+	wsHandler *handler.WSHandler,
 ) *gin.Engine {
 	r := gin.Default()
 
@@ -27,6 +28,9 @@ func SetupRouter(
 		api.POST("/auth/login", authHandler.Login)           // 微信登录
 		api.GET("/auth/wechat", authHandler.Login)           // 兼容小程序码扫码
 		api.POST("/auth/qrcode", authHandler.GenerateQRCode) // 生成小程序码
+
+		// WebSocket 连接（需要认证）
+		api.GET("/ws", middleware.JWTAuth(), wsHandler.ServeWS)
 
 		// 需要认证的路由
 		protected := api.Group("")
