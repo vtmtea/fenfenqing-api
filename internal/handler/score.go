@@ -21,15 +21,15 @@ func NewScoreHandler(db *gorm.DB) *ScoreHandler {
 
 // GetScoreList 获取分数记录列表
 func (h *ScoreHandler) GetScoreList(c *gin.Context) {
-	roomIDStr := c.Param("roomID")
-	roomID, err := strconv.ParseUint(roomIDStr, 10, 32)
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
 		response.BadRequest(c, "无效的房间 ID")
 		return
 	}
 
 	var scores []model.Score
-	if err := h.db.Where("room_id = ?", roomID).Order("create_time DESC").Limit(50).Find(&scores).Error; err != nil {
+	if err := h.db.Where("room_id = ?", id).Order("create_time DESC").Limit(50).Find(&scores).Error; err != nil {
 		response.InternalError(c, "获取分数记录失败")
 		return
 	}
@@ -39,8 +39,8 @@ func (h *ScoreHandler) GetScoreList(c *gin.Context) {
 
 // AddScore 添加分数记录
 func (h *ScoreHandler) AddScore(c *gin.Context) {
-	roomIDStr := c.Param("roomID")
-	roomID, err := strconv.ParseUint(roomIDStr, 10, 32)
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
 		response.BadRequest(c, "无效的房间 ID")
 		return
@@ -57,13 +57,13 @@ func (h *ScoreHandler) AddScore(c *gin.Context) {
 
 	// 检查房间是否存在
 	var room model.Room
-	if err := h.db.First(&room, roomID).Error; err != nil {
+	if err := h.db.First(&room, id).Error; err != nil {
 		response.NotFound(c)
 		return
 	}
 
 	score := &model.Score{
-		RoomID:  uint(roomID),
+		RoomID:  uint(id),
 		Details: req.Details,
 	}
 
@@ -77,10 +77,10 @@ func (h *ScoreHandler) AddScore(c *gin.Context) {
 
 // DeleteScore 删除分数记录
 func (h *ScoreHandler) DeleteScore(c *gin.Context) {
-	roomIDStr := c.Param("roomID")
+	idStr := c.Param("id")
 	scoreIDStr := c.Param("scoreID")
 
-	roomID, err := strconv.ParseUint(roomIDStr, 10, 32)
+	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
 		response.BadRequest(c, "无效的房间 ID")
 		return
@@ -93,7 +93,7 @@ func (h *ScoreHandler) DeleteScore(c *gin.Context) {
 	}
 
 	var score model.Score
-	if err := h.db.Where("id = ? AND room_id = ?", scoreID, roomID).First(&score).Error; err != nil {
+	if err := h.db.Where("id = ? AND room_id = ?", scoreID, id).First(&score).Error; err != nil {
 		response.NotFound(c)
 		return
 	}
