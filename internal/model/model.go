@@ -46,6 +46,8 @@ type RoomMember struct {
 type Score struct {
 	ID         uint           `gorm:"primarykey" json:"_id"`
 	RoomID     uint           `gorm:"index;not null" json:"roomId"`
+	OperatorID uint           `gorm:"index;not null" json:"operatorId"` // 操作者 ID
+	Operator   string         `gorm:"size:50" json:"operator"`          // 操作者名称
 	Details    ScoreDetails   `gorm:"serializer:json" json:"details"`
 	CreateTime time.Time      `gorm:"autoCreateTime" json:"createTime"`
 }

@@ -39,6 +39,12 @@ func (h *ScoreHandler) GetScoreList(c *gin.Context) {
 
 // AddScore 添加分数记录
 func (h *ScoreHandler) AddScore(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		response.Unauthorized(c)
+		return
+	}
+
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
@@ -47,7 +53,8 @@ func (h *ScoreHandler) AddScore(c *gin.Context) {
 	}
 
 	var req struct {
-		Details []model.ScoreDetail `json:"details" binding:"required,min=1"`
+		Details    []model.ScoreDetail `json:"details" binding:"required,min=1"`
+		Operator   string              `json:"operator"` // 操作者名称（前端传入）
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -62,9 +69,18 @@ func (h *ScoreHandler) AddScore(c *gin.Context) {
 		return
 	}
 
+	// 获取操作者信息
+	var user model.User
+	operatorName := req.Operator
+	if err := h.db.First(&user, userID).Error; err == nil && req.Operator == "" {
+		operatorName = user.Nickname
+	}
+
 	score := &model.Score{
-		RoomID:  uint(id),
-		Details: req.Details,
+		RoomID:     uint(id),
+		OperatorID: userID.(uint),
+		Operator:   operatorName,
+		Details:    req.Details,
 	}
 
 	if err := h.db.Create(score).Error; err != nil {
