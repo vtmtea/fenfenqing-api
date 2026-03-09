@@ -16,6 +16,9 @@ func SetupRouter(
 ) *gin.Engine {
 	r := gin.Default()
 
+	// 提供静态文件服务（上传的头像）
+	r.Static("/uploads", "./uploads")
+
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
@@ -39,6 +42,7 @@ func SetupRouter(
 			// 用户相关
 			protected.GET("/user/info", authHandler.GetUserInfo)     // 获取用户信息
 			protected.PUT("/user", authHandler.UpdateUserInfo)       // 更新用户信息
+			protected.POST("/user/avatar", authHandler.UploadAvatar) // 上传头像
 
 			// 房间相关
 			rooms := protected.Group("/rooms")

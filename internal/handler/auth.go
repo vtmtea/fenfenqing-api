@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -209,6 +211,56 @@ func (h *AuthHandler) UpdateUserInfo(c *gin.Context) {
 		"nickname":  user.Nickname,
 		"avatarUrl": user.AvatarURL,
 		"phone":     user.Phone,
+	})
+}
+
+// UploadAvatar 上传头像
+func (h *AuthHandler) UploadAvatar(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		response.Unauthorized(c)
+		return
+	}
+
+	// 获取上传的文件
+	file, err := c.FormFile("avatar")
+	if err != nil {
+		response.BadRequest(c, "请选择头像文件")
+		return
+	}
+
+	// 创建 uploads 目录
+	uploadDir := "./uploads/avatars"
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		response.InternalError(c, "创建目录失败")
+		return
+	}
+
+	// 生成唯一文件名
+	ext := filepath.Ext(file.Filename)
+	filename := fmt.Sprintf("%d_%d%s", userID, time.Now().UnixNano(), ext)
+	filepath := filepath.Join(uploadDir, filename)
+
+	// 保存文件
+	if err := c.SaveUploadedFile(file, filepath); err != nil {
+		response.InternalError(c, "保存文件失败")
+		return
+	}
+
+	// 构建访问 URL（相对于服务器根目录）
+	avatarURL := fmt.Sprintf("/uploads/avatars/%s", filename)
+
+	// 更新用户头像
+	var user model.User
+	if err := h.db.First(&user, userID).Error; err != nil {
+		response.NotFound(c)
+		return
+	}
+
+	h.db.Model(&user).Update("avatar_url", avatarURL)
+
+	response.Success(c, gin.H{
+		"avatarUrl": avatarURL,
 	})
 }
 
